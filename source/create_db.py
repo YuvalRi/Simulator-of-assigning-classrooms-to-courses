@@ -1,93 +1,127 @@
 import sqlite3
-import csv
+import os
 
-config_filename = 'config.txt'
-db_filename = 'schedule.db'
+def delete_database(db_filename):
+    """Delete the database file if it exists"""
+    try:
+        if os.path.exists(db_filename):
+            os.remove(db_filename)
+            print(f"Database {db_filename} deleted successfully")
+    except Exception as e:
+        print(f"Error deleting database: {e}")
 
-# Function to create tables in the database
+def database_exists(db_filename):
+    """Check if database file exists"""
+    return os.path.exists(db_filename)
+
+# Create a new SQLite database with the given filename
+# Create tables for courses, students, and classrooms
 def create_tables(db_filename):
-    # Connect to the SQLite database (or create it if it doesn't exist)
-    conn = sqlite3.connect(db_filename) 
-    c = conn.cursor()
+    conn = sqlite3.connect(db_filename)
+    cursor = conn.cursor()
 
-    # Create the courses table
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS courses (
-            id INTEGER PRIMARY KEY,
-            course_name TEXT NOT NULL,
-            student TEXT NOT NULL,
-            number_of_students INTEGER NOT NULL,
-            class_id INTEGER REFERENCES classrooms(id),
-            course_length INTEGER NOT NULL
-        );
-    ''')
+    try:
+        cursor.execute("""CREATE TABLE IF NOT EXISTS courses (
+                        id INTEGER PRIMARY KEY,
+                        course_name TEXT NOT NULL,
+                        student TEXT NOT NULL,
+                        number_of_students INTEGER NOT NULL,
+                        class_id INTEGER REFERENCES classrooms(id),
+                        course_length INTEGER NOT NULL)""")
+                        
+        cursor.execute("""CREATE TABLE IF NOT EXISTS students (
+                        grade TEXT PRIMARY KEY, 
+                        count INTEGER NOT NULL)""")
+                        
+        cursor.execute("""CREATE TABLE IF NOT EXISTS classrooms (
+                        id INTEGER PRIMARY KEY, 
+                        location TEXT NOT NULL, 
+                        current_course_id INTEGER NOT NULL, 
+                        current_course_time_left INTEGER NOT NULL)""")
+                        
+        conn.commit()
+        print("Tables created successfully")
+    except Exception as e:
+        print(f"Error creating tables: {e}")
+    finally:
+        conn.close()
 
-    # Create the students table
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS students (
-            grade TEXT PRIMARY KEY,
-            count INTEGER NOT NULL
-        );
-    ''')
+def get_config_file_path():
+    while True:
+        file_path = input("Enter config file path: ").strip().strip('"\'')
+        if file_path:
+            return file_path
+        print("Path cannot be empty. Please try again.")
 
-    # Create the classrooms table
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS classrooms (
-            id INTEGER PRIMARY KEY,
-            location TEXT NOT NULL,
-            current_course_id INTEGER NOT NULL,
-            current_course_time_left INTEGER NOT NULL
-        );
-    ''')
-
-    # Commit changes and close the connection
-    conn.commit()
-    conn.close()
-
-    print(f"Tables created in the database '{db_filename}'.")
-
-# Call the function to create tables
-create_tables(db_filename)
-
-# Function to insert data from config_filename into the database
-
-# Connect to the SQLite database
-conn = sqlite3.connect(db_filename) 
-c = conn.cursor()
-
-def insert_data_from_config(connection):
-    file_path = 'config.txt'
-    cursor = connection.cursor()
+def reset_tables(db_filename):
+    """Clear all data from tables in the database so new data can be inserted.
+    Otherwise, many warnings will be raised when trying to insert data that already exists."""
+    conn = sqlite3.connect(db_filename)
+    cursor = conn.cursor()
     
-    with open(file_path, 'r') as file:
-        for line in file:
-            line = line.strip()
+    try:
+        cursor.execute("DELETE FROM courses")
+        cursor.execute("DELETE FROM students")
+        cursor.execute("DELETE FROM classrooms")
+        conn.commit()
+        print("Tables reset successfully")
+    except Exception as e:
+        print(f"Error resetting tables: {e}")
+    finally:
+        conn.close()
 
-            if line:
-                parts = [part.strip() for part in line.split(',')]
+def insert_data_from_config(db_filename, config_path):
+    conn = sqlite3.connect(db_filename)
+    cursor = conn.cursor()
+    
+    try:
+        with open(config_path, 'r') as file:
+            for line_number, line in enumerate(file, 1):
+                line = line.strip()
+                if not line:
+                    continue
+                
+                parts = [p.strip() for p in line.split(',')]
                 first_letter = parts[0].upper()
                 
-                if first_letter == 'C':
-                    if len(parts) >= 7:
-                        cursor.execute('''INSERT INTO courses 
-                            (id, course_name, student, number_of_students, class_id, course_length) 
-                            VALUES (?, ?, ?, ?, ?, ?)''',
-                            (parts[1], parts[2], parts[3], parts[4], parts[5], parts[6]))
-                
-                elif first_letter == 'S':
-                    if len(parts) >= 3:
-                        cursor.execute('INSERT INTO students (grade, count) VALUES (?, ?)',
-                            (parts[1], parts[2]))
-                
-                elif first_letter == 'R':
-                    if len(parts) >= 3:
-                        cursor.execute('''INSERT INTO classrooms 
-                            (id, location, current_course_id, current_course_time_left) 
-                            VALUES (?, ?, 0, 0)''',
-                            (parts[1], parts[2]))
-                            
-    connection.commit()
-    print("Data inserted into the database.")
+                if first_letter == 'C' and len(parts) >= 7:
+                    cursor.execute("INSERT INTO courses VALUES (?, ?, ?, ?, ?, ?)", 
+                                 (parts[1], parts[2], parts[3], parts[4], parts[5], parts[6]))
+                elif first_letter == 'S' and len(parts) >= 3:
+                    cursor.execute("INSERT INTO students VALUES (?, ?)", 
+                                 (parts[1], parts[2]))
+                elif first_letter == 'R' and len(parts) >= 3:
+                    cursor.execute("INSERT INTO classrooms VALUES (?, ?, 0, 0)", 
+                                 (parts[1], parts[2]))
+                    
+        conn.commit()
+    except Exception as e:
+        print(f"Error: {e}")
+        conn.rollback()
+    finally:
+        conn.close()
 
-# Call the function to insert data from the configuration file
-insert_data_from_config(conn)
+def print_database_content(db_filename):
+    """Print the content of all tables in the database"""
+    conn = sqlite3.connect(db_filename)
+    cursor = conn.cursor()
+    
+    try:
+        print("\n=== Database Content ===")
+        # Get all tables
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = cursor.fetchall()
+        
+        # Print content of each table
+        for table in tables:
+            table_name = table[0]
+            if table_name != 'sqlite_sequence':  # Skip SQLite internal table
+                print(f"\n{table_name.upper()} table:")
+                cursor.execute(f"SELECT * FROM {table_name}")
+                rows = cursor.fetchall()
+                for row in rows:
+                    print(row)
+    except Exception as e:
+        print(f"Error printing database content: {e}")
+    finally:
+        conn.close()
