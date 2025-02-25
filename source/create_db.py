@@ -116,7 +116,7 @@ def print_database_content(db_filename):
         for table in tables:
             table_name = table[0]
             if table_name != 'sqlite_sequence':  # Skip SQLite internal table
-                print(f"\n{table_name.upper()} table:")
+                print(f"\n{table_name}")
                 cursor.execute(f"SELECT * FROM {table_name}")
                 rows = cursor.fetchall()
                 for row in rows:
