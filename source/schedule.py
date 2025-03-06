@@ -133,11 +133,3 @@ def run_schedule_loop():
         finally:
             if 'conn' in locals():
                 conn.close()
-
-def main():
-    print("Starting schedule loop...")
-    run_schedule_loop()
-    print("Schedule loop ended.")
-
-if __name__ == "__main__":
-    main()
