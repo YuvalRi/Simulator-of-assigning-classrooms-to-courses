@@ -4,7 +4,7 @@ from schedule import run_schedule_loop
 
 def main():
     #if you want to delete the database file, uncomment the next line
-    #delete_database('schedule.db')
+    delete_database('schedule.db')
     db_filename = 'schedule.db'
     
     # Create database if it doesn't exist

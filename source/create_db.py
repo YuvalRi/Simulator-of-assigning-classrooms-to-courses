@@ -28,16 +28,16 @@ def create_tables(db_filename):
                         number_of_students INTEGER NOT NULL,
                         class_id INTEGER REFERENCES classrooms(id),
                         course_length INTEGER NOT NULL)""")
-                        
-        cursor.execute("""CREATE TABLE IF NOT EXISTS students (
-                        grade TEXT PRIMARY KEY, 
-                        count INTEGER NOT NULL)""")
-                        
+        
         cursor.execute("""CREATE TABLE IF NOT EXISTS classrooms (
                         id INTEGER PRIMARY KEY, 
                         location TEXT NOT NULL, 
                         current_course_id INTEGER NOT NULL, 
                         current_course_time_left INTEGER NOT NULL)""")
+                        
+        cursor.execute("""CREATE TABLE IF NOT EXISTS students (
+                        grade TEXT PRIMARY KEY, 
+                        count INTEGER NOT NULL)""")
                         
         conn.commit()
         print("Tables created successfully")

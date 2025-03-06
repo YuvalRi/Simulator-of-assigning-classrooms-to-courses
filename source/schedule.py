@@ -18,13 +18,43 @@ def get_unassigned_courses(cursor):
     cursor.execute("SELECT id, class_id, course_length FROM courses ORDER BY id")
     return cursor.fetchall()
 
-def assign_course_to_classroom(cursor, course_id, classroom_id, course_length):
-    """Assign a course to an available classroom"""
+def update_student_count(cursor, student_type, num_students):
+    """Update the count of available students when a course is assigned"""
     cursor.execute("""
-        UPDATE classrooms 
-        SET current_course_id = ?, current_course_time_left = ? 
+        UPDATE students 
+        SET count = count - ? 
+        WHERE grade = ? AND count >= ?
+    """, (num_students, student_type, num_students))
+    return cursor.rowcount > 0
+
+def get_course_details(cursor, course_id):
+    """Get course details including student type and number of students"""
+    cursor.execute("""
+        SELECT course_name, student, number_of_students 
+        FROM courses 
         WHERE id = ?
-    """, (course_id, course_length, classroom_id))
+    """, (course_id,))
+    return cursor.fetchone()
+
+def assign_course_to_classroom(cursor, course_id, classroom_id, course_length):
+    """Assign a course to an available classroom if enough students are available"""
+    # Get course details
+    course_details = get_course_details(cursor, course_id)
+    if not course_details:
+        return False
+    
+    _, student_type, num_students = course_details
+    
+    # Check if enough students are available
+    if update_student_count(cursor, student_type, num_students):
+        # If successful, update classroom
+        cursor.execute("""
+            UPDATE classrooms 
+            SET current_course_id = ?, current_course_time_left = ? 
+            WHERE id = ?
+        """, (course_id, course_length, classroom_id))
+        return True
+    return False
 
 def get_course_name(cursor, course_id):
     """Get course name by id"""
@@ -56,6 +86,32 @@ def get_completed_courses(cursor):
         WHERE cl.current_course_time_left = 0 AND cl.current_course_id != 0
     """)
     return cursor.fetchall()
+
+def print_current_state(cursor):
+    """Print current state of all tables after each iteration"""
+    print("\n=== Current Database State ===")
+    
+    # Print courses table
+    print("\ncourses")
+    cursor.execute("SELECT * FROM courses ORDER BY id")
+    courses = cursor.fetchall()
+    for course in courses:
+        print(course)
+    
+    # Print students table
+    print("\nstudents")
+    cursor.execute("SELECT * FROM students ORDER BY grade")
+    students = cursor.fetchall()
+    for student in students:
+        print(student)
+    
+    # Print classrooms table
+    print("\nclassrooms")
+    cursor.execute("SELECT * FROM classrooms ORDER BY id")
+    classrooms = cursor.fetchall()
+    for classroom in classrooms:
+        print(classroom)
+    print("\n")
 
 def run_schedule_loop():
     db_filename = 'schedule.db'
@@ -107,10 +163,10 @@ def run_schedule_loop():
                 available_courses = get_unassigned_courses(cursor)
                 for new_course_id, preferred_room, course_length in available_courses:
                     if preferred_room == room_id:
-                        new_course_name = get_course_name(cursor, new_course_id)
-                        assign_course_to_classroom(cursor, new_course_id, room_id, course_length)
-                        print(f"({iteration}) {location}: {new_course_name} is scheduled to start")
-                        break
+                        if assign_course_to_classroom(cursor, new_course_id, room_id, course_length):
+                            new_course_name = get_course_name(cursor, new_course_id)
+                            print(f"({iteration}) {location}: {new_course_name} is scheduled to start")
+                            break
 
             # Handle remaining available classrooms
             available_classrooms = get_available_classrooms(cursor)
@@ -118,11 +174,15 @@ def run_schedule_loop():
                 courses = get_unassigned_courses(cursor)
                 for course_id, preferred_room, course_length in courses:
                     if preferred_room in available_classrooms:
-                        course_name = get_course_name(cursor, course_id)
-                        classroom_location = get_classroom_location(cursor, preferred_room)
-                        assign_course_to_classroom(cursor, course_id, preferred_room, course_length)
-                        available_classrooms.remove(preferred_room)
-                        print(f"({iteration}) {classroom_location}: {course_name} is scheduled to start")
+                        if assign_course_to_classroom(cursor, course_id, preferred_room, course_length):
+                            course_name = get_course_name(cursor, course_id)
+                            classroom_location = get_classroom_location(cursor, preferred_room)
+                            available_classrooms.remove(preferred_room)
+                            print(f"({iteration}) {classroom_location}: {course_name} is scheduled to start")
+            
+            # Print current state after all operations
+            print(f"\n--- After Iteration {iteration} ---")
+            print_current_state(cursor)
             
             conn.commit()
             iteration += 1
